@@ -438,8 +438,9 @@ impl<T: Copy> Array<T> {
             panic!("Array index {} out of bounds (len = {})", index, len);
         }
         unsafe {
-            let items = self.items() as *mut T;
-            *items.add(index) = value;
+            let slot = (self.items() as *mut T).add(index);
+            *slot = value;
+            gc_write_barrier(slot as *mut u8);
         }
     }
 
@@ -470,7 +471,15 @@ impl<T: Copy> Array<T> {
             dst_len
         );
         unsafe {
-            ::core::ptr::copy_nonoverlapping(src.as_ptr(), self.items() as *mut T, src.len());
+            let items = self.items() as *mut T;
+            ::core::ptr::copy_nonoverlapping(src.as_ptr(), items, src.len());
+            let start = items as usize;
+            let end = start + src.len() * ::core::mem::size_of::<T>();
+            let mut page = start & !0xfff;
+            while page < end {
+                gc_write_barrier(page.max(start) as *mut u8);
+                page += 0x1000;
+            }
         }
     }
 }
@@ -699,10 +708,17 @@ pub fn field_get_value_at_offset<Ty: Copy>(obj: impl SystemObject, offset: usize
     unsafe { *(instance.field_ptr(offset) as *const Ty) }
 }
 
+#[inline]
+pub fn gc_write_barrier(slot: *mut u8) {
+    unsafe { il2cpp::api::gc_dirty(slot) }
+}
+
 pub fn field_set_value_at_offset<Ty: Copy>(obj: impl SystemObject, offset: usize, value: Ty) {
     let instance = obj.as_instance();
     unsafe {
-        *(instance.field_ptr(offset) as *mut Ty) = value;
+        let slot = instance.field_ptr(offset) as *mut Ty;
+        *slot = value;
+        gc_write_barrier(slot as *mut u8);
     }
 }
 
@@ -714,6 +730,8 @@ pub fn static_field_get_value_at_offset<Ty: Copy>(class: Class, offset: usize) -
 pub fn static_field_set_value_at_offset<Ty: Copy>(class: Class, offset: usize, value: Ty) {
     let base = class.raw().static_fields as *mut u8;
     unsafe {
-        *(base.add(offset) as *mut Ty) = value;
+        let slot = base.add(offset) as *mut Ty;
+        *slot = value;
+        gc_write_barrier(slot as *mut u8);
     }
 }

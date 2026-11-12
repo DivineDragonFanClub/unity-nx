@@ -66,6 +66,9 @@ pub(crate) fn assembly_getallassemblies() -> &'static CppVector<&'static Il2CppA
 #[skyline::from_offset(0x474370)]
 pub(crate) fn gc_malloc_kind(size: usize, kind: u32) -> *mut u8;
 
+#[skyline::from_offset(0x471450)]
+pub(crate) fn gc_dirty(ptr: *mut u8);
+
 // length 0 returns the s_EmptyString static instance, do NOT write into it
 #[skyline::from_offset(0x44a168)]
 pub(crate) fn string_new_size(length: i32, method_info: crate::OptionalMethod) -> crate::Il2CppString;
